@@ -72,6 +72,7 @@ vector<vector<double>> Gragg_Bulirsch_Stoer(const double epsilon, const unsigned
 	unsigned int i, j, k, m, counter = 1;
 	unsigned int n_steps;
 	unsigned int i_max, increment;
+	unsigned int divergence;
 	double H_big, h_small;
 	double local_error;
 	double s;
@@ -105,32 +106,32 @@ vector<vector<double>> Gragg_Bulirsch_Stoer(const double epsilon, const unsigned
 	H_big = H_min;//velkost kroku
 
 	i = 0;
-	x.push_back(H_min);//okrajova podmienka
+	x.push_back(H_min/1000);//okrajova podmienka
 
 	y1.push_back(x_initial);//pocitocna podmienka x(0)
 	y2.push_back(v_initial);//pocitocna podmienka x´(0)
 
 	cout << "running Gragg Bulirsch Stoer... " << endl;
 
-	while (y1[i] > -1E-10 )
+	while (x[i] < cut_off)
 	{
 		//cout << "----------------------- step " << counter << "-----------------------------------" << endl;
 		//cout << "space step: " << i << endl;
 		//cout << "stepsize H: " << H_big << endl << endl;
 
-		if (x[i] > cut_off)
+		if (x[i] >= cut_off)
 		{
 			cout << "pri zadanom cutoffe a energii nebol najdeny viazany stav" << endl;
 			break;
 		}
 
-		if (reduce_step == false)
+		/*if (reduce_step == false)
 		{
-			if (y1[i] < 0)
+			if (y1[i] < 1E-10)
 			{
-				/*cout << "reducing stepsize" << endl;
+				cout << "reducing stepsize" << endl;
 				cout << "x: " << x[i] << endl;
-				cout << "stepsize H: " << H_big << endl;*/
+				cout << "stepsize H: " << H_big << endl;
 
 				x.pop_back();
 				y1.pop_back();
@@ -140,13 +141,17 @@ vector<vector<double>> Gragg_Bulirsch_Stoer(const double epsilon, const unsigned
 				reduce_step = true;
 				i--;
 
-				/*cout << "after delete: " << endl;
+				cout << "after delete: " << endl;
 				cout << "x: " << x[i] << "\t" << "y1: " << y1[i] << endl;
-				cout << "stepsize H: " << H_big << endl << endl;*/
+				cout << "stepsize H: " << H_big << endl << endl;
 
 				continue;
 			}
-		}
+		}*/
+
+		//podmienka na ukoncenie cyklu
+		if (x[i] > 1)
+			if (y1[i] < 1E-10) break;
 
 		//max_n_steps urcuje max pocet podintervalov na intervale H
 		for (k = 0; k < max_n_steps; k++)
@@ -273,6 +278,9 @@ vector<vector<double>> Gragg_Bulirsch_Stoer(const double epsilon, const unsigned
 		if (repeat == false) H_evolution.push_back(H_big);
 		repeat = true;
 
+		if (y1[i] > y1[i - 1] && s < 1) divergence++;
+		if (divergence > 10000) break;
+
 		//cout << "<<<<<<<<<<<<<<<<<<<< repeat: " << (repeat ? "true" : "false") <<" >>>>>>>>>>>>>>>>>>"<< endl;
 		//cout << "----------------------- end of step " << counter << "------------------------------" << endl << endl << endl;
 		counter++;
@@ -356,7 +364,9 @@ vector<vector<double>> Gragg_Bulirsch_Stoer(const double epsilon, const unsigned
 
 int main()
 {
-	unsigned int i;
+	unsigned int i, j;
+	double energy, energy_low, energy_high;
+	double y1_old;
 	vector<double> x;
 	vector<double> y1;
 	vector<vector<double>> Richardson_1, Richardson_2;
@@ -371,11 +381,10 @@ int main()
 	const double v_initial = 1;//pociatocna podmienka 1. derivacia
 	const double H_max = 0.5;
 	const double H_min = 0.0000005;
-	const double cut_off = pow(10,6);
+	const double cut_off = pow(10,2);
 
 
-	double k_s = 1.0;
-	double energy = -0.01022594538000000000;
+	double k_s = 0.0;
 
 	cout.precision(13);
 	cout.setf(std::ios::fixed, std::ios::floatfield);
@@ -391,14 +400,58 @@ int main()
 	string fileName1 = fileNameStream1.str();
 	const char * c = fileName1.c_str();
 	system(c);
+	cout << endl;
 
-	input.swap(Gragg_Bulirsch_Stoer(epsilon, max_n_steps, H_max, H_min, x_initial, v_initial, x_write, H_write, output_points, k_s, energy, cut_off));
-	i = input[0][0];
-	x.swap(input[1]);
-	y1.swap(input[2]);
+	energy_low = -0.8;
+	energy_high = 0.0;
+	y1_old = 10;
+
+	for (j = 0; j < 100; j++)
+	{
+		energy = (energy_high + energy_low) / 2;
+		//energy = -0.50015;
+		cout << "----------------------- bisection cycle: " << j + 1 << " ------------------------" << endl;
+		cout << "energy is: " << energy << endl << endl;
+
+		input.swap(Gragg_Bulirsch_Stoer(epsilon, max_n_steps, H_max, H_min, x_initial, v_initial, x_write, H_write, output_points, k_s, energy, cut_off));
+		i = input[0][0];
+		x.swap(input[1]);
+		y1.swap(input[2]);
+
+		cout << "phi at cutoff -->  new:" << y1[y1.size() - 1] << " old: " << y1_old << endl;
+
+		if (y1[y1.size() - 1] > y1_old)
+		{
+			y1_old = y1[y1.size() - 1];
+			energy_low = energy;
+		}
+		else
+		{
+			y1_old = y1[y1.size() - 1];
+			energy_high = energy;
+		}
+
+		cout << "new energy interval: " << "( " << energy_low << " , " << energy_high << " )" << endl;
+
+		
+
+		if (abs(y1[y1.size() - 1]) < 1E-5)
+		{
+			cout << "convergence archived!!!" << endl;
+			break;
+		}
+		if (abs(energy_high - energy_low) < 1E-12)
+		{
+			cout << "convergence archived!!!" << endl;
+			break;
+		}
+
+		cout << "-------------------------- end of cycle: " << j + 1 << " ------------------------" << endl << endl;
+	}
+
 
 	auto time_end = chrono::high_resolution_clock::now();
-	cout << "total CPU time: " << chrono::duration_cast<chrono::nanoseconds>(time_end - time_start).count()*10E-10 << "s" << endl << endl;
+	cout << endl << "total CPU time: " << chrono::duration_cast<chrono::nanoseconds>(time_end - time_start).count()*10E-10 << "s" << endl << endl;
 
 
 	system("PAUSE");
